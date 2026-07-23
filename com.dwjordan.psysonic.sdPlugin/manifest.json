@@ -1,0 +1,60 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"UUID": "com.dwjordan.psysonic",
+	"Name": "Psysonic",
+	"Version": "0.1.0.0",
+	"Author": "Dave Jordan",
+	"Description": "Control Psysonic from your Stream Deck with a button that live-updates to the current album art.",
+	"Category": "Psysonic",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 2,
+	"CodePath": "bin/plugin.js",
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "10.15"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Actions": [
+		{
+			"Name": "Now Playing",
+			"UUID": "com.dwjordan.psysonic.nowplaying",
+			"Icon": "imgs/actions/nowplaying/icon",
+			"Tooltip": "Shows Psysonic's album art live. Press to play/pause; if Psysonic isn't running, launches it and starts playing.",
+			"PropertyInspectorPath": "ui/now-playing.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/nowplaying/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "Skip Track",
+			"UUID": "com.dwjordan.psysonic.skip",
+			"Icon": "imgs/actions/skip/icon",
+			"Tooltip": "Skip to the next or previous track in the local Psysonic queue.",
+			"PropertyInspectorPath": "ui/skip.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/skip/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	]
+}

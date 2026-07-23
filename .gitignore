@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+com.dwjordan.psysonic.sdPlugin/bin/
+com.dwjordan.psysonic.sdPlugin/logs/
+.DS_Store
+.claude/
