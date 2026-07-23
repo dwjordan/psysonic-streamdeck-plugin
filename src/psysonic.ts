@@ -11,6 +11,7 @@ export type PsysonicTrack = {
 	title?: string;
 	artist?: string;
 	album?: string;
+	albumId?: string;
 	/** Track length in seconds, when the snapshot reports it. */
 	duration?: number;
 	/** Subsonic cover-art id — resolvable against the same server Psysonic streams from. */
@@ -25,6 +26,8 @@ export type PsysonicSnapshot = {
 	track: PsysonicTrack | null;
 	/** Navidrome/Subsonic base URL inferred from the active server entry. */
 	serverUrl?: string;
+	/** Host/port label from the active server, e.g. `192.168.0.196:4533`. */
+	serverName?: string;
 };
 
 /**
@@ -158,6 +161,14 @@ function delay(ms: number): Promise<void> {
 }
 
 function serverUrlFromSnapshot(data: any): string | undefined {
+	const name = serverNameFromSnapshot(data);
+	if (!name) {
+		return undefined;
+	}
+	return /^https?:\/\//i.test(name) ? name : `http://${name}`;
+}
+
+function serverNameFromSnapshot(data: any): string | undefined {
 	const servers = data?.servers;
 	if (!Array.isArray(servers) || servers.length === 0) {
 		return undefined;
@@ -165,10 +176,7 @@ function serverUrlFromSnapshot(data: any): string | undefined {
 	const activeId = data?.music_library?.active_server_id;
 	const server = servers.find((entry: any) => entry.id === activeId) ?? servers[0];
 	const name = String(server?.name ?? "").trim();
-	if (!name) {
-		return undefined;
-	}
-	return /^https?:\/\//i.test(name) ? name : `http://${name}`;
+	return name || undefined;
 }
 
 function parseSnapshot(stdout: string): PsysonicSnapshot | null {
@@ -185,12 +193,14 @@ function parseSnapshot(stdout: string): PsysonicSnapshot | null {
 						? data.queue.length
 						: 0,
 			serverUrl: serverUrlFromSnapshot(data),
+			serverName: serverNameFromSnapshot(data),
 			track: t
 				? {
 						id: t.id,
 						title: t.title,
 						artist: t.artist,
 						album: t.album,
+						albumId: t.albumId,
 						duration: typeof t.duration === "number" ? t.duration : undefined,
 						coverArt: t.coverArt ?? t.albumId,
 					}

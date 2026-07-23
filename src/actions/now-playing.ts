@@ -7,7 +7,9 @@ import streamDeck, {
 	WillDisappearEvent,
 } from "@elgato/streamdeck";
 import { clientFromSettings, ConnectionSettings } from "../subsonic";
-import { DEFAULT_PSYSONIC_BIN, Psysonic } from "../psysonic";
+import { loadCredentials, savePassword } from "../credentials";
+import { coverArtFromPsysonicCache } from "../psysonic-cover-cache";
+import { DEFAULT_PSYSONIC_BIN, Psysonic, PsysonicTrack } from "../psysonic";
 
 type Settings = ConnectionSettings & {
 	pollSeconds?: number;
@@ -47,10 +49,11 @@ export class NowPlaying extends SingletonAction<Settings> {
 	private readonly settingsByAction = new Map<string, Settings>();
 
 	override onWillAppear(ev: WillAppearEvent<Settings>): void {
-		this.rememberSettings(ev.action.id, ev.payload.settings);
-		this.runningCache = undefined;
-		this.lastRender.delete(ev.action.id);
-		this.startPolling(ev.action);
+		void this.bootstrap(ev.action.id, ev.payload.settings).then(() => {
+			this.runningCache = undefined;
+			this.lastRender.delete(ev.action.id);
+			this.startPolling(ev.action);
+		});
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<Settings>): void {
@@ -58,11 +61,12 @@ export class NowPlaying extends SingletonAction<Settings> {
 	}
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<Settings>): void {
-		this.rememberSettings(ev.action.id, ev.payload.settings);
-		this.stopPolling(ev.action.id);
-		this.runningCache = undefined;
-		this.lastRender.delete(ev.action.id);
-		this.startPolling(ev.action);
+		void this.bootstrap(ev.action.id, ev.payload.settings).then(() => {
+			this.stopPolling(ev.action.id);
+			this.runningCache = undefined;
+			this.lastRender.delete(ev.action.id);
+			this.startPolling(ev.action);
+		});
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<Settings>): Promise<void> {
@@ -108,6 +112,51 @@ export class NowPlaying extends SingletonAction<Settings> {
 		}
 		this.settingsByAction.set(actionId, merged);
 		return merged;
+	}
+
+	/** Hydrate settings from disk and persist new passwords from the Property Inspector. */
+	private async bootstrap(actionId: string, incoming: Settings): Promise<void> {
+		const merged = this.rememberSettings(actionId, incoming);
+		if (incoming.password && merged.serverUrl && merged.username) {
+			await savePassword(merged.serverUrl, merged.username, incoming.password);
+		}
+		if (!merged.password && merged.serverUrl) {
+			const creds = await loadCredentials(merged.serverUrl, merged.username);
+			if (creds) {
+				this.settingsByAction.set(actionId, {
+					...merged,
+					username: merged.username || creds.username,
+					password: creds.password,
+				});
+			}
+		}
+	}
+
+	private async resolveArtSettings(
+		actionId: string,
+		settings: Settings,
+		serverUrl?: string,
+	): Promise<Settings> {
+		const artSettings: Settings = {
+			...settings,
+			serverUrl: settings.serverUrl || serverUrl,
+		};
+		if (!artSettings.password && artSettings.serverUrl) {
+			const creds = await loadCredentials(artSettings.serverUrl, artSettings.username);
+			if (creds) {
+				artSettings.username = artSettings.username || creds.username;
+				artSettings.password = creds.password;
+				this.settingsByAction.set(actionId, {
+					...settings,
+					username: artSettings.username,
+					password: creds.password,
+					serverUrl: artSettings.serverUrl,
+				});
+			}
+		} else if (artSettings.password && artSettings.serverUrl && artSettings.username) {
+			await savePassword(artSettings.serverUrl, artSettings.username, artSettings.password);
+		}
+		return artSettings;
 	}
 
 	private setOptimistic(id: string, playing: boolean): void {
@@ -173,11 +222,8 @@ export class NowPlaying extends SingletonAction<Settings> {
 
 		await action.setTitle(settings.showTitle === true ? formatTitle(track) : "");
 
-		const artSettings: Settings = {
-			...settings,
-			serverUrl: settings.serverUrl || snap?.serverUrl,
-		};
-		const cover = await this.coverArt(artSettings, track.coverArt);
+		const artSettings = await this.resolveArtSettings(id, settings, snap?.serverUrl);
+		const cover = await this.coverArt(artSettings, track, snap?.serverName);
 		if (!cover) {
 			await this.paint(action, "logo-no-cover", LOGO_IMAGE);
 			return;
@@ -187,27 +233,46 @@ export class NowPlaying extends SingletonAction<Settings> {
 	}
 
 	/** Fetch (and cache) a cover-art data URI by its Subsonic id. */
-	private async coverArt(settings: Settings, coverArtId: string): Promise<string | null> {
+	private async coverArt(
+		settings: Settings,
+		track: PsysonicTrack,
+		serverName?: string,
+	): Promise<string | null> {
+		const coverArtId = track.coverArt;
+		if (!coverArtId) {
+			return null;
+		}
+
 		const cached = this.coverCache.get(coverArtId);
 		if (cached) {
 			return cached;
 		}
+
+		const fromPsysonic = await coverArtFromPsysonicCache(serverName, coverArtId, track.albumId);
+		if (fromPsysonic) {
+			this.coverCache.set(coverArtId, fromPsysonic);
+			return fromPsysonic;
+		}
+
 		const client = clientFromSettings(settings);
 		if (!client) {
 			streamDeck.logger.warn(
-				`cover art skipped: configure Server URL, username, and password in the button settings ` +
+				`cover art skipped: no Psysonic cache and Navidrome credentials missing ` +
 					`(server=${Boolean(settings.serverUrl)}, user=${Boolean(settings.username)}, ` +
 					`pass=${Boolean(settings.password)})`,
 			);
 			return null;
 		}
+
 		try {
 			const dataUri = await client.coverArtDataUri(coverArtId, 144);
 			if (dataUri) {
 				this.coverCache.set(coverArtId, dataUri);
 				return dataUri;
 			}
-			streamDeck.logger.warn(`cover art unavailable for id ${coverArtId}`);
+			streamDeck.logger.warn(
+				`cover art unavailable for id ${coverArtId} (Navidrome auth failed — re-save username/password in button settings)`,
+			);
 			return null;
 		} catch (err) {
 			streamDeck.logger.warn(`cover art fetch failed: ${(err as any)?.message ?? err}`);

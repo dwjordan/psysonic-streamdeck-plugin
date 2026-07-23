@@ -3,5 +3,6 @@ dist/
 *.log
 com.dwjordan.psysonic.sdPlugin/bin/
 com.dwjordan.psysonic.sdPlugin/logs/
+com.dwjordan.psysonic.sdPlugin/.credentials/
 .DS_Store
 .claude/

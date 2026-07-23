@@ -51,6 +51,14 @@ export class SubsonicClient {
 	/** Fetch cover art and return it as a data URI ready for Stream Deck's setImage. */
 	async coverArtDataUri(id: string, size = 144): Promise<string | null> {
 		const url = this.url("getCoverArt", { id, size });
+		const fromCurl = await this.coverArtViaCurl(url);
+		if (fromCurl) {
+			return fromCurl;
+		}
+		return this.coverArtViaFetch(url);
+	}
+
+	private async coverArtViaFetch(url: string): Promise<string | null> {
 		try {
 			const res = await fetchResilient(url);
 			if (!res.ok) {
@@ -61,9 +69,12 @@ export class SubsonicClient {
 				return null;
 			}
 			const buffer = Buffer.from(await res.arrayBuffer());
+			if (!buffer.length) {
+				return null;
+			}
 			return `data:${contentType};base64,${buffer.toString("base64")}`;
 		} catch {
-			return this.coverArtViaCurl(url);
+			return null;
 		}
 	}
 
@@ -75,7 +86,7 @@ export class SubsonicClient {
 				["-sfL", "--max-time", "10", "-H", "Connection: close", url],
 				{ encoding: "buffer", maxBuffer: 8 * 1024 * 1024, timeout: 12000 },
 			);
-			if (!stdout?.length) {
+			if (!stdout?.length || stdout[0] === 0x7b) {
 				return null;
 			}
 			return `data:image/jpeg;base64,${stdout.toString("base64")}`;
