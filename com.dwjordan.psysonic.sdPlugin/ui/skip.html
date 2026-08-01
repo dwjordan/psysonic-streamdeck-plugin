@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Skip Track</title>
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Direction">
+			<sdpi-select setting="direction" default="next">
+				<option value="next">Next track</option>
+				<option value="previous">Previous track</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Psysonic path">
+			<sdpi-textfield setting="psysonicPath" placeholder="/Applications/Psysonic.app/Contents/MacOS/psysonic"></sdpi-textfield>
+		</sdpi-item>
+	</body>
+</html>
